@@ -1,0 +1,404 @@
+2(A)
+
+; this is the 2(a) 
+ORG 0000H
+AGAIN:	MOV DPTR, #0300H
+NEXT:	CLR A
+	MOVC A,@A+DPTR
+	JZ AGAIN
+	
+TRANSFER:	MOV SCON, #40H
+		MOV TMOD, #20H
+		MOV TL1, #0FAH
+		MOV TH1, #0FAH
+		MOV TCON, #40H 
+		MOV SBUF, A
+		WAIT:	JNB TI, WAIT
+			CLR TI
+			CLR TF1
+			CLR TR1
+			INC DPTR
+			SJMP NEXT
+
+ORG 0300H
+STRING:
+DB 'W','E',' ','A','R','E',' ','R','E','A','D','Y',00H
+
+
+END;
+
+
+2(B)
+
+; generally we take SMOD = 0 BUT IT IS SAID IT IS ONE
+; timer 1 cout is loaded with -3
+; calculated bord rate is 4B00 p1 lower byte and p2 higher byte
+
+ORG 0000H
+; FIRSTLY I AM GOING TO SEND IT ON THE PORT
+MOV A,#00H
+MOV P1,A
+MOV A,#4BH
+MOV P2,A
+MOV A, #'B'
+LJMP TRANSFER
+
+TRANSFER:  MOV PCON,#80H
+	   MOV SCON, #40H
+	   MOV TMOD, #20H; TIIMER1 MOD 2
+	   MOV TH1, #0FDH
+	   MOV TCON, #40H
+	   ; TRANSFER
+	   MOV SBUF, A
+	   WAIT: JNB TI,WAIT
+
+	   CLR TI
+	   CLR TR1
+	   CLR TF1
+	   SJMP TRANSFER
+
+
+END;
+
+
+2(C)
+
+; switch is connect to the port p2.0 
+
+ORG 0000H
+MAIN:	MOV SCON, #50H
+	MOV TMOD, #20H
+	MOV TH1, #0FDH ; BOARD RATE 9600
+	MOV TCON, #40H
+
+CHECK: 	JNB P2.0, SEND_HELLO
+	JB P2.0, SEND_GOOD
+	SJMP CHECK
+
+SEND_HELLO:  MOV DPTR, #HELLO
+	     NEXT1: CLR A
+	     	    MOVC A,@A+DPTR
+	     	    JZ RETURN1
+	     	    LCALL SEND_CHAR
+	     	    INC DPTR
+	     	    SJMP NEXT1;	  
+	     RETURN1: RET
+
+SEND_GOOD:  MOV DPTR, #GOODBYE
+	     NEXT2: CLR A
+	     	    MOVC A,@A+DPTR
+	     	    JZ RETURN2
+	     	    LCALL SEND_CHAR
+	     	    INC DPTR
+	     	    SJMP NEXT2;	  
+	     RETURN2: RET
+
+SEND_CHAR:	MOV SBUF,A
+	     	WAIT: JNB TI,WAIT
+	     	CLR TI
+	     	CLR TF1
+	        
+	     	RET;
+
+
+ORG 0300H
+HELLO:
+DB 'H','E','L','L','O', 0
+GOODBYE:
+DB 'G','O','O','D','B','Y','E', 0
+
+END
+
+
+2(D)
+
+; first i send the happy diwali mnnit then after i will do other thing
+
+ORG 0000H
+MAIN: MOV SCON, #50H
+      MOV TMOD,#20H
+      MOV TH1, #0FAH
+      MOV TCON, #40H
+      MOV P2,#0FFH ; IF WE ARE MAKING IT INPUT PORT THEN WE HAVE TO FIRST WRITE LIKE THAT
+      MOV P1,#00H ; THIS IS FOR THE LED INITIALLY 0
+      MOV DPTR, #STRING
+TRANSFER:  CLR A
+	   MOVC A,@A+DPTR
+	   JZ AFTER_STR
+	   ACALL SEND_STR
+	   INC DPTR
+	   SJMP TRANSFER
+
+AFTER_STR:	JNB RI,WRITE ; IF IT IS READING FORM THE TERMINAL TILL THEN I AM GOING TO WRITE ON THE TERMINAL
+		MOV A,SBUF
+		MOV P1,A ; SENDING DATA TO THE LED
+		CLR RI
+WRITE:	MOV A,P2 ; HERE I AM TAKING THE DATA FORM THE P2
+	ACALL SEND_STR
+	ACALL DELAY
+	SJMP AFTER_STR
+
+; THIS IS FOR SENDIG THE DATA
+SEND_STR: MOV SBUF,A
+WAIT: 	JNB TI, WAIT
+	CLR TI
+	RET
+; if you want to see the data is being send on the port p1 so you have press some button in the virtual 
+; terminal
+
+DELAY:
+	MOV R2, #255
+HERE1:	MOV R1, #255
+HERE2:	DJNZ R1, HERE2
+	DJNZ R2, HERE1
+	RET
+	
+
+ORG 0300H
+STRING: 
+DB 'H','A','P','P','Y', ' ', 'D','I','W','L','I', ' ', 'M','N','N','I','T', 0
+
+END;
+
+
+3(A)
+
+; count i have to load is F830
+
+ORG 0000H
+MAIN:	MOV IE,#88H
+	MOV TMOD, #10H
+	MOV TL1,#0FCH
+	MOV TH1, #0FDH
+	CPL P0.0
+	SETB TR1
+	MOV P1, #0FFH ; MAKINF P1 AS INPUT PORT
+LOOP:	MOV A,P2
+	MOV P1,A
+	SJMP LOOP
+
+	
+ORG 001BH
+LCALL HANDLE		
+RETI
+
+HANDLE:	CLR TR1
+	CPL P0.0
+	MOV TL1,#0FCH
+	MOV TH1, #0FDH
+	SETB TR1
+	RET
+
+
+; Q3(b) XTAL=11.0592MHz. Alternate between 1000 ticks (high) and 14 ticks (low)
+; High reload = 65536 - 1000 = 64536 -> 0xFC18
+; Low reload  = 65536 - 14   = 65522 -> 0xFFF2
+
+            ORG 0000h
+            LJMP START
+
+            ORG 001Bh     ; Timer1 ISR vector
+T1_ISR:
+            ; reload for next interval based on state
+            JNB HIGH_FLAG, SET_HIGH
+            ; currently was high, now go to low
+            CLR HIGH_FLAG
+            MOV TH1, #0FFh
+            MOV TL1, #0F2h   ; low: 0xFFF2
+            CLR P1.0         ; make low
+            RETI
+SET_HIGH:
+            SETB HIGH_FLAG
+            MOV TH1, #0FCh
+            MOV TL1, #018h   ; high: 0xFC18
+            SETB P1.0        ; make high
+            RETI
+
+START:
+            MOV SP, #70h
+            MOV TMOD, #10h   ; Timer1 mode1
+            ; initialize to produce first high interval
+            MOV TH1, #0FCh
+            MOV TL1, #018h
+            CLR HIGH_FLAG
+            SETB ET1
+            SETB EA
+            SETB TR1
+            SJMP $
+
+HIGH_FLAG   EQU 30h
+
+            END
+
+
+  3c
+              ; Q3(c) Timer0 -> 5kHz on P1.3 ; Timer1 -> 25kHz on P2.3
+
+            ORG 0000h
+            LJMP START
+
+            ORG 000Bh     ; Timer0 ISR
+T0_ISR:
+            MOV TH0, #0FFh
+            MOV TL0, #049h    ; 0xFF49
+            CPL P1.3
+            RETI
+
+            ORG 001Bh     ; Timer1 ISR
+T1_ISR:
+            MOV TH1, #0FFh
+            MOV TL1, #0DBh    ; 0xFFDB
+            CPL P2.3
+            RETI
+
+START:
+            MOV SP, #70h
+            ; Timer0 set to reload 0xFF49 (5kHz half period)
+            MOV TMOD, #11h   ; Timer0 mode1, Timer1 mode1
+            MOV TH0, #0FFh
+            MOV TL0, #049h
+            MOV TH1, #0FFh
+            MOV TL1, #0DBh
+            SETB ET0
+            SETB ET1
+            SETB EA
+            SETB TR0
+            SETB TR1
+            SJMP $
+
+            END
+; Q3(d) Use INT0, INT1. P3.2 and P3.3 are external interrupts (enter ISR on press).
+
+            ORG 0000h
+            LJMP START
+
+            ORG 0003h
+INT0_ISR:
+            MOV P1, #0FFh    ; light all LEDs on P1
+            CLR EX0
+            RETI
+
+            ORG 0013h
+INT1_ISR:
+            MOV P2, #0FFh    ; light all LEDs on P2
+            CLR EX1
+            RETI
+
+START:
+            MOV SP, #70h
+            ; Configure external interrupts edge triggered
+            SETB IT0
+            SETB IT1
+            SETB EX0
+            SETB EX1
+            SETB EA
+            SJMP $
+
+            END
+; Q3(e) INT0 pulses -> toggle P1 every 2 pulses => P1 frequency = input/2
+
+            ORG 0000h
+            LJMP START
+
+            ORG 0003h
+INT0_ISR:
+            INC INT_COUNT
+            MOV A, INT_COUNT
+            ANL A, #01h
+            JNZ NOT_EVEN
+            ; even count -> toggle P1
+            CPL P1
+NOT_EVEN:
+            CLR EX0
+            RETI
+
+START:
+            MOV SP, #70h
+            CLR P1
+            CLR INT_COUNT
+            SETB IT0
+            SETB EX0
+            SETB EA
+            SJMP $
+
+INT_COUNT  EQU 30h
+
+            END
+; Q1(a) Person counter every ~10 s (XTAL=22MHz). P3.2 -> INT0 sensor (falling)
+; Display person count on P1 (0..255). Timer0 counts overflows; 280 overflows ~10s.
+
+            ORG 0000h
+            LJMP START
+
+; External 0 vector (INT0)
+            ORG 0003h
+INT0_ISR:   INC PERSONCNT
+            CLR EX0        ; clear external0 flag (optional for level)
+            RETI
+
+; Timer0 vector
+            ORG 000Bh
+TIMER0_ISR: INC T0_OVFCNT
+            MOV A, T0_OVFCNT
+            CJNE A, #280, T0_DONE  ; if not reached 280, return
+            CLR T0_OVFCNT
+            MOV A, PERSONCNT
+            MOV P1, A               ; output count to P1
+            CLR PERSONCNT
+T0_DONE:    RETI
+
+START:      MOV SP, #70h
+            MOV P1, #00h
+
+            ; Initialize external interrupt 0 (falling edge)
+            MOV IT0, #1     ; edge triggered (if assembler accepts bit names, else set TCON)
+            SETB EX0        ; enable external int0
+
+            ; Configure Timer0 mode1 (16-bit), run
+            MOV TMOD, #01h  ; Timer0 mode1, Timer1 = 0
+            CLR TR0
+            SETB ET0        ; enable Timer0 interrupt
+            SETB EA         ; global interrupt enable
+            SETB TR0        ; start Timer0
+
+            ; initialize counters
+            CLR PERSONCNT
+            CLR T0_OVFCNT
+
+MAIN_LOOP:
+            SJMP MAIN_LOOP
+
+; data
+PERSONCNT  EQU 30h
+T0_OVFCNT  EQU 31h
+
+            END
+; Q1(b) 1 kHz on P1.2 using Timer1 Mode 2 (auto-reload).
+; Use TH1 = 0x1B (27) => overflow ~125 us; count 4 overflows then toggle P1.2.
+
+            ORG 0000h
+            LJMP START
+
+            ORG 000Bh
+TIMER1_ISR: INC T1_OVFCOUNT
+            MOV A, T1_OVFCOUNT
+            CJNE A, #4, T1_EXIT
+            CLR T1_OVFCOUNT
+            CPL P1.2         ; toggle P1.2
+T1_EXIT:    RETI
+
+START:      MOV SP, #70h
+
+            ; Timer1 in Mode2
+            MOV TMOD, #20h   ; Timer1 mode2 (Timer0 unused)
+            MOV TH1, #1Bh    ; reload 27
+            MOV TL1, #1Bh    ; initial
+            SETB ET1
+            SETB EA
+            SETB TR1
+            CLR T1_OVFCOUNT
+
+            SJMP $
+
+T1_OVFCOUNT EQU 30h
+            END
